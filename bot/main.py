@@ -21,20 +21,35 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def main() -> None:
-    args = parse_args()
-    prices = [float(p.strip()) for p in args.prices.split(",") if p.strip()]
+def parse_prices(raw_prices: str) -> list[float]:
+    try:
+        prices = [float(p.strip()) for p in raw_prices.split(",") if p.strip()]
+    except ValueError as exc:
+        raise ValueError("--prices contient une valeur invalide") from exc
 
     if not prices:
         raise ValueError("Aucun prix fourni")
 
-    config = BotConfig(
-        initial_cash=args.initial_cash,
-        short_window=args.short_window,
-        long_window=args.long_window,
-        trade_size=args.trade_size,
-    )
-    config.validate()
+    if any(price <= 0 for price in prices):
+        raise ValueError("Tous les prix doivent être > 0")
+
+    return prices
+
+
+def main() -> None:
+    args = parse_args()
+
+    try:
+        prices = parse_prices(args.prices)
+        config = BotConfig(
+            initial_cash=args.initial_cash,
+            short_window=args.short_window,
+            long_window=args.long_window,
+            trade_size=args.trade_size,
+        )
+        config.validate()
+    except ValueError as exc:
+        raise SystemExit(f"Erreur de configuration: {exc}") from exc
 
     strategy = MovingAverageCrossStrategy(
         short_window=config.short_window,
@@ -48,7 +63,7 @@ def main() -> None:
     for price in prices:
         signal = strategy.on_price(price)
         backtester.step(price, signal)
-        print(f"price={price:.2f} signal={signal}")
+        print(f"price={price:.2f} signal={signal.value}")
 
     result = backtester.result(prices[-1])
     print("\n=== Résultat ===")
